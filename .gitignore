@@ -1,0 +1,5 @@
+__pycache__
+wandb
+cse576_pytorch_demo.py
+fashion-mnist_test.csv
+fashion-mnist_train.csv
