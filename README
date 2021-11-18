@@ -1,0 +1,4 @@
+Fashion MNIST classification model implementation from https://www.kaggle.com/pankajj/fashion-mnist-with-pytorch-93-accuracy
+visualization from https://olaralex.com/visualizing-the-loss-landscape/
+
+Fashion MNIST dataset from https://www.kaggle.com/zalando-research/fashionmnist
