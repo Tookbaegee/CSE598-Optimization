@@ -81,7 +81,7 @@ class FashionCNN(nn.Module):
         
         return out
 
-def testWithOptimizer(model, optimizer):
+def trainWithOptimizer(model, optimizer):
     num_epochs = 50
     count = 0
     # Lists for visualization of loss and accuracy 
@@ -140,20 +140,41 @@ def testWithOptimizer(model, optimizer):
                 loss_list.append(loss.data)
                 iteration_list.append(count)
                 accuracy_list.append(accuracy)
-                wandb.log({"loss": loss.data, "accuracy": accuracy})
+                # wandb.log({"loss": loss.data, "accuracy": accuracy})
 
             if not (count % 1000):
                 print("Iteration: {}, Loss: {}, Accuracy: {}%".format(count, loss.data, accuracy))
-        wandb.log({"loss epoch": loss_list[len(loss_list) - 1], "accuracy epoch": accuracy_list[len(accuracy_list) - 1]})
+        # wandb.log({"loss epoch": loss_list[len(loss_list) - 1], "accuracy epoch": accuracy_list[len(accuracy_list) - 1]})
+
+def test_model(model):
+    total = 0
+    correct = 0
+
+    for images, labels in test_loader:
+        images, labels = images.to(device), labels.to(device)
+
+        test = Variable(images.view(100, 1, 28, 28))
+
+        outputs = model(test)
+        loss = error(outputs, labels)
+        print(loss.data)
+        predictions = torch.max(outputs, 1)[1].to(device)
+        correct += (predictions == labels).sum()
+
+        total += len(labels)
+
+    accuracy = correct * 100 / total
+
+    print("loss: {}".format(loss.data) + ", accuracy: {}".format(accuracy))
 
 if __name__ == '__main__':
-    key = "91d4844cfd842fc2c6393a72cb16c61efca9a96d"
-    wandb.init(project="optimization-final", entity="cse598qk")
-    wandb.config = {
-    "learning_rate": 0.001,
-    "epochs": 10,
-    "batch_size": 100
-    }
+    # key = "91d4844cfd842fc2c6393a72cb16c61efca9a96d"
+    # wandb.init(project="optimization-final", entity="cse598qk")
+    # wandb.config = {
+    # "learning_rate": 0.001,
+    # "epochs": 10,
+    # "batch_size": 100
+    # }
 
 
     train_csv = pd.read_csv("fashion-mnist_train.csv")
@@ -168,29 +189,23 @@ if __name__ == '__main__':
     error = nn.CrossEntropyLoss()
 
     learning_rate = 0.001
+    device = "cuda:0"
+    model = FashionCNN()
+    model.to(device)
+    trainWithOptimizer(model, torch.optim.RMSprop(model.parameters(), lr=learning_rate))
+    torch.save(model.state_dict(), 'fashionCNN-rms.pt')
 
     model = FashionCNN()
-    print(model)
-    # model = FashionCNN()
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # model.to(device)
-    # testWithOptimizer(model, torch.optim.RMSprop(model.parameters(), lr=learning_rate))
-    # torch.save(model.state_dict(), 'fashionCNN-rms.pt')
+    model.to(device)
+    trainWithOptimizer(model, torch.optim.Adam(model.parameters(), lr=learning_rate))
+    torch.save(model.state_dict(), 'fashionCNN-adam.pt')
 
-    # model = FashionCNN()
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # model.to(device)
-    # testWithOptimizer(model, torch.optim.Adam(model.parameters(), lr=learning_rate))
-    # torch.save(model.state_dict(), 'fashionCNN-adam.pt')
+    model = FashionCNN()
+    model.to(device)
+    trainWithOptimizer(model, torch.optim.Adagrad(model.parameters(), lr=learning_rate))
+    torch.save(model.state_dict(), 'fashionCNN-adagrad.pt')
 
-    # model = FashionCNN()
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # model.to(device)
-    # testWithOptimizer(model, torch.optim.Adagrad(model.parameters(), lr=learning_rate))
-    # torch.save(model.state_dict(), 'fashionCNN-adagrad.pt')
-
-    # model = FashionCNN()
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # model.to(device)
-    # testWithOptimizer(model, torch.optim.SGD(model.parameters(), lr=learning_rate))
-    # torch.save(model.state_dict(), 'fashionCNN-sgd.pt')
+    model = FashionCNN()
+    model.to(device)
+    trainWithOptimizer(model, torch.optim.SGD(model.parameters(), lr=learning_rate))
+    torch.save(model.state_dict(), 'fashionCNN-sgd.pt')

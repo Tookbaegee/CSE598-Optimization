@@ -1,9 +1,9 @@
 import torch
+import copy
 import numpy as np
 import torchvision
 import pandas as pd
-from torchvision import transforms as T
-
+import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib import animation
@@ -20,8 +20,8 @@ def init_directions(model):
 
     n_params = 0
     for name, param in model.named_parameters():
-        delta = torch.normal(.0, 1., size=param.size()).to('cuda:0')
-        nu = torch.normal(.0, 1., size=param.size()).to('cuda:0')
+        delta = torch.normal(.0, 1, size=param.size()).to('cuda:0')
+        nu = torch.normal(.0, 1, size=param.size()).to('cuda:0')
 
         param_norm = torch.norm(param).to('cuda:0')
         delta_norm = torch.norm(delta).to('cuda:0')
@@ -45,23 +45,22 @@ def init_network(model, all_noises, alpha, beta):
     with torch.no_grad():
         for param, noises in zip(model.parameters(), all_noises):
             delta, nu = noises
-            new_value = param + alpha * delta + beta * nu
+            new_value = param + (alpha * delta) + (beta * nu)
             param.copy_(new_value)
     return model
 
-def run_landscape_gen(name, model, batch_size, resolution):
+def run_landscape_gen(name, model, batch_size):
     BATCH_SIZE = batch_size
-    RESOLUTION = resolution
+    RESOLUTION = 50
 
-    test_csv = pd.read_csv("fashion-mnist_train.csv")
-    dataset = FashionDataset(test_csv, transform=T.Compose([T.ToTensor()]))
+    test_csv = pd.read_csv("fashion-mnist_test.csv")
+    dataset = FashionDataset(test_csv, transform=transforms.Compose([transforms.ToTensor()]))
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE)
 
-    
+    error = torch.nn.CrossEntropyLoss()
     print('Testing model')
       
     noises = init_directions(model)
-    crit = torch.nn.CrossEntropyLoss()
 
     A, B = np.meshgrid(np.linspace(-1, 1, RESOLUTION),
                     np.linspace(-1, 1, RESOLUTION), indexing='ij')
@@ -74,23 +73,26 @@ def run_landscape_gen(name, model, batch_size, resolution):
             n_batch = 0
             alpha = A[i, j]
             beta = B[i, j]
-            net = init_network(model, noises, alpha, beta).to('cuda:0')
+            modelcp = copy.deepcopy(model)
+            net = init_network(modelcp, noises, alpha, beta).to('cuda:0')
+
             for batch, labels in dataloader:
                 batch = batch.to('cuda:0')
                 labels = labels.to('cuda:0')
                 with torch.no_grad():
                     preds = net(batch)
-                    loss = crit(preds, labels)
-                    total_loss += loss.data
+                    loss = error(preds, labels)
+                    total_loss += loss.item()
                     n_batch += 1
             loss_surface[i, j] = total_loss / (n_batch * BATCH_SIZE)
-            del net, batch, labels
-            print(f'alpha : {alpha:.2f}, beta : {beta:.2f}, loss : {loss_surface[i, j]:.2f}')
+            del net
+            torch.cuda.empty_cache()
+            # print(f'alpha : {alpha}, beta : {beta}, loss : {loss_surface[i, j]}')
             
 
-    plt.figure(figsize=(28, 28))
+    plt.figure(figsize=(10, 10))
     plt.contour(A, B, loss_surface)                       
-    plt.savefig(f'{name}_results/contour_bs_{BATCH_SIZE}_res_{RESOLUTION}.png', dpi=100)
+    plt.savefig(f'{name}_results/contour_bs_.png', dpi=300)
     plt.close()
 
     np.save(f'{name}_results/xx_model.npy', A)
@@ -104,9 +106,9 @@ def generate_plots(name):
 
     zz = np.log(zz)
 
-    plt.figure(figsize=(28, 28))
+    plt.figure(figsize=(10, 10))
     plt.contour(xx, yy, zz)
-    plt.savefig(f'{name}_results/log_contour.png', dpi=100)
+    plt.savefig(f'{name}_results/log_contour1.png', dpi=300)
     plt.close()
 
     ## 3D plot
@@ -117,11 +119,11 @@ def generate_plots(name):
     ax.set_xlim(-1, 1)
     ax.set_ylim(-1, 1)
 
-    plt.savefig(f'{name}_results/log_surface.png', dpi=100,
+    plt.savefig(f'{name}_results/log_surface1.png', dpi=300,
                 format='png', bbox_inches='tight')
     plt.close()
 
-    fig = plt.figure(figsize=(28, 28))
+    fig = plt.figure(figsize=(10, 10))
     ax = Axes3D(fig)
     ax.set_axis_off()
 
@@ -141,39 +143,35 @@ def generate_plots(name):
     anim = animation.FuncAnimation(fig, animate, init_func=init,
                                    frames=100, interval=20, blit=True)
 
-    anim.save(f'{name}_results/log_surface.gif',
+    anim.save(f'{name}_results/log_surface1.gif',
               fps=15,  writer='imagemagick')
 
 
 if __name__ == '__main__':
-    # model = FashionCNN()
-    # model.load_state_dict(torch.load('fashionCNN-adam.pt'))
-    # print(torch.sum(model.fc2.weight.data))
-    # model.to('cuda:0')
-    # run_landscape_gen('adam', model, 100, 28)
-    # generate_plots('adam')
+    model = FashionCNN()
+    model.load_state_dict(torch.load('fashionCNN-adam.pt'))
+    model.to('cuda:0')
+    run_landscape_gen('adam', model, 100)
+    
 
-    # model = FashionCNN()
-    # model.load_state_dict(torch.load('fashionCNN-rms.pt'))
-    # print(torch.sum(model.fc2.weight.data))
-    # model.to('cuda:0')
-    # run_landscape_gen('rms', model, 100, 28)
-    # generate_plots('rms')
+    model = FashionCNN()
+    model.load_state_dict(torch.load('fashionCNN-rms.pt'))
+    model.to('cuda:0')
+    run_landscape_gen('rms', model, 100)
+    
 
-    # model = FashionCNN()
-    # model.load_state_dict(torch.load('fashionCNN-adagrad.pt'))
-    # print(torch.sum(model.fc2.weight.data))
-    # model.to('cuda:0')
-    # run_landscape_gen('adagrad', model, 100, 28)
-    # generate_plots('adagrad')
+    model = FashionCNN()
+    model.load_state_dict(torch.load('fashionCNN-adagrad.pt'))
+    model.to('cuda:0')
+    run_landscape_gen('adagrad', model, 100)
+    
 
-    # model = FashionCNN()
-    # model.load_state_dict(torch.load('fashionCNN-sgd.pt'))
-    # print(torch.sum(model.fc2.weight.data))
-    # model.to('cuda:0')
-    # run_landscape_gen('sgd', model, 100, 28)
-    # generate_plots('sgd')
-
+    model = FashionCNN()
+    model.load_state_dict(torch.load('fashionCNN-sgd.pt'))
+    model.to('cuda:0')
+    run_landscape_gen('sgd', model, 100)
+    
+    
     generate_plots('adam')
     generate_plots('rms')
     generate_plots('adagrad')
